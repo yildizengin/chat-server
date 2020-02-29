@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Chat</title>
+    <meta charset="UTF-8"> 
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font: 13px Helvetica, Arial;
+        }
+
+        form {
+            background: #000;
+            padding: 3px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+        form input {
+            border: 0;
+            padding: 10px;
+            width: 90%;
+            margin-right: .5%;
+        }
+
+        form button {
+            width: 9%;
+            background: rgb(130, 224, 255);
+            border: none;
+            padding: 10px;
+        }
+
+        #messages {
+            list-style-type: none;
+            margin: 0;
+        }
+
+        #messages li {
+            padding: 5px 10px;
+        }
+
+        #messages li:nth-child(odd) {
+            background: #eee;
+        }
+
+        #container {
+            margin-bottom: 40px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <ul id="messages"></ul>
+    </div>
+    
+    <form action="">
+        <input id="m" autocomplete="off" />
+        <button>Send</button>
+    </form>
+</body>
+<script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+<script>
+
+    /*
+    setTimeout(() => {
+        setInterval(() => {
+            $.getJSON('https://baconipsum.com/api/?type=meat-and-filler', (data) => {
+                data.forEach(text => {
+                    websocket.send(JSON.stringify({
+                    method: 'sendMessage',
+                    params: {
+                        conversationId:conversations[0].id,
+                        text:text
+                    }
+                }));
+                })
+            })
+        }, 10);
+    }, 2000);
+
+    */
+
+    class ChatClient {
+        constructor(config) {
+            
+            this.url = config.url || 'ws://localhost:8080';
+            this.onMessage = config.onMessage || ((message) => {});
+
+        }
+
+        connect(callback) {
+            this.requests = {};
+            this.websocket = new WebSocket(this.url);
+            this.websocket.onopen = callback;
+            this.websocket.onmessage = this.messageHandler.bind(this);
+        }
+
+        auth(token, callback) {
+            this.send('auth', {token: token}, callback);
+        }
+
+        createGroupConversation(name, description, members, callback) {
+            this.send('createGroupConversation', { name: name, description: description, members: members}, callback);
+        }
+
+        getConversationList(callback) {
+            this.send('listConversations', {}, callback);
+        }
+
+        getConversationMessages(conversationId,callback) {
+            this.send('listMessages', {conversationId:conversationId}, callback);
+        }
+
+        sendMessage(conversationId, text) {
+            this.send('sendMessage', {conversationId:conversationId, text:text});
+        }
+
+        messageHandler(e) {
+            const data = JSON.parse(e.data);
+            if(data.requestId !== undefined && this.requests[data.requestId]) {
+                if(data.method === 'error') {
+                    this.requests[data.requestId](new Error(data.params.message));
+                } else {
+                    this.requests[data.requestId](null, data.params);
+                }
+                delete this.requests[data.requestId];
+            } else if(data.method === 'message') {
+                this.onMessage(data.params);
+            }
+        }
+
+        send(method, params, callback) {
+            let requestId;
+            if(callback !== undefined) {
+                requestId = `${new Date().getTime()}-${Math.floor(Math.random() * (1e9 - 1e8) ) + 1e8}`;
+                this.requests[requestId] = callback;
+                console.log(`Send new request with: ${requestId}`);
+            }
+            this.websocket.send(JSON.stringify({method: method, params: params, requestId: requestId}));
+            
+        }
+
+        
+
+    }
+
+    let selectedConversation;
+
+    const chatClient = new ChatClient({
+        onMessage: (message) => {
+            $('#messages').append($('<li>').text(message.sender.name + ':' + message.text));
+        }
+    });
+    chatClient.connect((e) => {
+        console.log('Connected chat server!');
+
+        chatClient.auth('sample-token', (err, user) => {
+            console.log(`User _> Id:${user.id}, Name:${user.name}`);
+
+            chatClient.getConversationList((err, conversations) => {
+                conversations.forEach(c => console.log(`Conversation _> Id:${c.id}, Name:${c.name}, Type:${c.type}, Unread Message Count:${c.unread}`))
+                selectedConversation = conversations[0].id;
+
+                chatClient.getConversationMessages(selectedConversation, (err, res) => {
+                    res.messages.forEach(m => {
+                        $('#messages').prepend($('<li>').text(m.sender.name + ':' + m.text));
+                    })
+                })
+            })
+
+
+            /*
+            chatClient.createGroupConversation('Mod Odası', ':)', [2, 3, 4, 5], (err, res) => {
+                console.log(res);
+            })
+
+            */
+
+        })
+    })
+
+
+    $(function () {
+        $('form').submit(function () {
+            console.log(`Send to #${selectedConversation}`);
+            chatClient.sendMessage(selectedConversation, $('#m').val())
+            $('#m').val('');
+            return false;
+        });
+    });
+
+</script>
+
+</html>
